@@ -1,10 +1,12 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Req, Res, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from '@nestjs/swagger';
-import { AuthService } from './auth.service.js';
-import { ConfirmVerificationReqDto, SignInReqDto, SignUpReqDto, SignUpResDto, SignInResDto, GetUserResDto, ConfirmVerificationResDto } from './dto/auth.dto.js';
-import type { Request, Response } from 'express';
-import { setSessionCookie, clearSessionCookie } from '../utils/utils.js';
+import { Body, Controller, Get, HttpCode, HttpStatus, Logger, Post, Query, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
+import { type Request, type Response } from 'express';
 import { AuthGuard } from '../utils/guard.js';
+import { clearSessionCookie, generateTokenWithHash, hashToken, setSessionCookie } from '../utils/utils.js';
+import { AuthService } from './auth.service.js';
+import { ConfirmVerificationReqDto, ConfirmVerificationResDto, GetUserResDto, SignInReqDto, SignInResDto, SignUpReqDto, SignUpResDto } from './dto/auth.dto.js';
+import { SkipResponseInterceptor } from '../utils/interceptors.js';
 
 /**
  * Controller handling authentication endpoints such as sign-up, sign-in, and session retrieval.
@@ -12,7 +14,12 @@ import { AuthGuard } from '../utils/guard.js';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-    constructor(private readonly authService: AuthService) {}
+    private readonly l = new Logger(AuthController.name);
+
+    constructor(
+        private readonly authService: AuthService,
+        private readonly configService: ConfigService
+    ) {}
 
     /**
      * Handles user registration/sign-up.
@@ -54,7 +61,12 @@ export class AuthController {
             userAgent
         });
 
-        setSessionCookie(res, data.rawToken);
+        setSessionCookie({
+            response: res,
+            token: data.rawToken,
+            cookieName: this.configService.getOrThrow<string>('SESSION_COOKIE_NAME'),
+            maxAge: 7 * 24 * 60 * 60 * 1000
+        });
         return { data: data.user, message: 'sign-in success' };
     }
 
@@ -107,7 +119,59 @@ export class AuthController {
         if (req.withUser?.sessionToken) {
             await this.authService.signOut(req.withUser.sessionToken);
         }
-        clearSessionCookie(res);
+        clearSessionCookie({
+            response: res,
+            cookieName: this.configService.getOrThrow<string>('SESSION_COOKIE_NAME')
+        });
         return { message: 'sign-out success' };
+    }
+
+    @Get('google')
+    @SkipResponseInterceptor()
+    public async googleSocialSignIn(@Res({ passthrough: true }) response: Response) {
+        const { rawToken, hashedToken } = generateTokenWithHash();
+        setSessionCookie({
+            response,
+            token: rawToken,
+            cookieName: this.configService.getOrThrow<string>('GOOGLE_TOKEN_EXCHANGE_COOKIE_NAME'),
+            maxAge: 10 * 60 * 1000
+        });
+
+        const authorizationUrl = new URL(this.configService.getOrThrow<string>('GOOGLE_AUTHORIZATION_URL'));
+        authorizationUrl.searchParams.set('client_id', this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID'));
+        authorizationUrl.searchParams.set('redirect_uri', this.configService.getOrThrow<string>('GOOGLE_REDIRECT_URI'));
+        authorizationUrl.searchParams.set('response_type', 'code');
+        authorizationUrl.searchParams.set('scope', 'openid email profile');
+        authorizationUrl.searchParams.set('access_type', 'offline');
+        authorizationUrl.searchParams.set('prompt', 'consent');
+
+        authorizationUrl.searchParams.set('state', hashedToken);
+        return response.redirect(authorizationUrl.toString());
+    }
+
+    @Get('google/callback')
+    @SkipResponseInterceptor()
+    public async googleSocialCallback(@Query('code') code: string, @Query('state') state: string, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
+        if (!code || !state) throw new UnauthorizedException('[Code, State] not Found');
+
+        const storedRawToken = req.cookies[this.configService.getOrThrow<string>('GOOGLE_TOKEN_EXCHANGE_COOKIE_NAME')];
+        if (!storedRawToken) throw new UnauthorizedException('OAuth state is missing');
+
+        const hashStoredRawToken = hashToken(storedRawToken);
+        if (hashStoredRawToken !== state) throw new UnauthorizedException('Invalid OAuth state');
+
+        clearSessionCookie({
+            response: res,
+            cookieName: this.configService.getOrThrow<string>('GOOGLE_TOKEN_EXCHANGE_COOKIE_NAME')
+        });
+
+        const newOrUpdateUserAccount = await this.authService.googleSocialCallback({ code });
+        setSessionCookie({
+            response: res,
+            token: newOrUpdateUserAccount.rawToken,
+            cookieName: this.configService.getOrThrow<string>('SESSION_COOKIE_NAME'),
+            maxAge: 7 * 24 * 60 * 60 * 1000
+        });
+        return res.redirect(`${this.configService.getOrThrow<string>('FRONTEND_URL')}/me`);
     }
 }

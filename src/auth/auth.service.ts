@@ -1,11 +1,11 @@
 import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { addDays, addMinutes } from 'date-fns';
+import { addDays, addMinutes, addSeconds } from 'date-fns';
 import { type DbService, dbService } from '../db/db.module.js';
 import { type MailerService, mailerService } from '../mailer/mailer.module.js';
 import createTemplateEmailVerification from '../templates/email-verification.js';
-import { UserSessionData } from '../utils/types.js';
+import { GoogleTokenResponse, GoogleUserInfoResponse, UserSessionData } from '../utils/types.js';
 import { generateTokenWithHash, hashToken } from '../utils/utils.js';
 
 /**
@@ -20,7 +20,7 @@ type SessionUserCache = {
 @Injectable()
 export class AuthService {
     private readonly sessionUserCache = new Map<string, SessionUserCache>();
-    private readonly logger = new Logger(AuthService.name);
+    private readonly l = new Logger(AuthService.name);
 
     constructor(
         @Inject(dbService) private readonly db: DbService,
@@ -35,50 +35,47 @@ export class AuthService {
      * @throws ConflictException if the user already has an account.
      * @throws BadRequestException if the provider is not supported.
      */
-    public async signUp({ name, email, password, providerId }: { name: string; email: string; password: string; providerId: 'credentials' | 'socials' }) {
-        if (providerId === 'credentials') {
-            const findUser = await this.db.user.findFirst({ where: { email } });
+    public async signUp({ name, email, password, providerId }: { name: string; email: string; password: string; providerId: 'credentials' | 'google' }) {
+        const findUser = await this.db.user.findFirst({ where: { email } });
 
-            if (findUser !== null) {
-                const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id } });
-                if (findAccount !== null) throw new ConflictException('account with associated user already exist');
-            }
-
-            const newUserAccount = await this.db.$transaction(async tx => {
-                const newUser = await tx.user.create({ data: { name, email } });
-                await tx.account.create({
-                    data: { userId: newUser.id, password: await bcrypt.hash(password, 10), providerId, accountId: newUser.id }
-                });
-
-                const findRole = await tx.role.findFirst({ where: { name: 'user' } });
-                if (findRole === null) throw new NotFoundException('role is not found');
-
-                await tx.userRole.create({ data: { userId: newUser.id, roleId: findRole.id } });
-                return { userId: newUser.id, name: newUser.name, email: newUser.email, role: findRole.name };
-            });
-
-            const { rawToken, hashedToken } = generateTokenWithHash();
-            const redirectUrl = `${this.configService.getOrThrow<string>('FRONTEND_URL')}/email-verification?e=${email}&t=${rawToken}`;
-            await this.mailerService.emails.send({
-                from: `NestJs-Backend <verification${this.configService.getOrThrow('APP_MAIL_NAME')}>`,
-                to: email,
-                subject: 'Email Verification',
-                html: createTemplateEmailVerification({ email: email, redirectUrl })
-            });
-
-            await this.db.verification.create({
-                data: {
-                    userId: newUserAccount.userId,
-                    type: 'emailVerification',
-                    tokenHash: hashedToken,
-                    expiredAt: addDays(new Date(), 1)
-                }
-            });
-
-            return newUserAccount;
-        } else {
-            throw new BadRequestException('non-credentials not exist yet through this service');
+        if (findUser !== null) {
+            const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id, providerId: 'credentials' } });
+            if (findAccount !== null) throw new ConflictException('account with associated user already exist');
+            // todo
         }
+
+        const newUserAccount = await this.db.$transaction(async tx => {
+            const newUser = await tx.user.create({ data: { name, email } });
+            await tx.account.create({
+                data: { userId: newUser.id, password: await bcrypt.hash(password, 10), providerId, accountId: newUser.id }
+            });
+
+            const findRole = await tx.role.findFirst({ where: { name: 'user' } });
+            if (findRole === null) throw new NotFoundException('role is not found');
+
+            await tx.userRole.create({ data: { userId: newUser.id, roleId: findRole.id } });
+            return { userId: newUser.id, name: newUser.name, email: newUser.email, role: findRole.name };
+        });
+
+        const { rawToken, hashedToken } = generateTokenWithHash();
+        const redirectUrl = `${this.configService.getOrThrow<string>('FRONTEND_URL')}/email-verification?e=${email}&t=${rawToken}`;
+        await this.mailerService.emails.send({
+            from: `NestJs-Backend <verification${this.configService.getOrThrow('APP_MAIL_NAME')}>`,
+            to: email,
+            subject: 'Email Verification',
+            html: createTemplateEmailVerification({ email: email, redirectUrl })
+        });
+
+        await this.db.verification.create({
+            data: {
+                userId: newUserAccount.userId,
+                type: 'emailVerification',
+                tokenHash: hashedToken,
+                expiredAt: addDays(new Date(), 1)
+            }
+        });
+
+        return newUserAccount;
     }
 
     /**
@@ -88,67 +85,63 @@ export class AuthService {
      * @throws UnauthorizedException if credentials are invalid.
      * @throws BadRequestException if the provider is not supported.
      */
-    public async signIn({ email, password, providerId, ipAddress, userAgent }: { email: string; password: string; providerId: 'credentials' | 'socials'; ipAddress?: string; userAgent?: string }) {
-        if (providerId === 'credentials') {
-            const findUser = await this.db.user.findFirst({ where: { email } });
-            if (!findUser) throw new UnauthorizedException('invalid credentials');
+    public async signIn({ email, password, providerId, ipAddress, userAgent }: { email: string; password: string; providerId: 'credentials' | 'google'; ipAddress?: string; userAgent?: string }) {
+        const findUser = await this.db.user.findFirst({ where: { email } });
+        if (!findUser) throw new UnauthorizedException('invalid credentials');
 
-            const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id, providerId } });
-            if (!findAccount || !findAccount.password) throw new UnauthorizedException('invalid credentials');
+        const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id, providerId } });
+        if (!findAccount || !findAccount.password) throw new UnauthorizedException('invalid credentials');
 
-            const isPasswordValid = await bcrypt.compare(password, findAccount.password);
-            if (!isPasswordValid) throw new UnauthorizedException('invalid credentials');
+        const isPasswordValid = await bcrypt.compare(password, findAccount.password);
+        if (!isPasswordValid) throw new UnauthorizedException('invalid credentials');
 
-            if (!findUser.verifiedAt) {
-                const existingVerification = await this.db.verification.findFirst({
-                    where: { userId: findUser.id, type: 'emailVerification' }
-                });
-
-                if (!existingVerification || existingVerification.expiredAt < new Date()) {
-                    if (existingVerification) {
-                        await this.db.verification.delete({ where: { id: existingVerification.id } });
-                    }
-
-                    const { rawToken, hashedToken } = generateTokenWithHash();
-                    const redirectUrl = `${this.configService.getOrThrow<string>('FRONTEND_URL')}/email-verification?e=${email}&t=${rawToken}`;
-                    
-                    await this.mailerService.emails.send({
-                        from: `NestJs-Backend <verification${this.configService.getOrThrow('APP_MAIL_NAME')}>`,
-                        to: email,
-                        subject: 'Email Verification',
-                        html: createTemplateEmailVerification({ email: email, redirectUrl })
-                    });
-
-                    await this.db.verification.create({
-                        data: {
-                            userId: findUser.id,
-                            type: 'emailVerification',
-                            tokenHash: hashedToken,
-                            expiredAt: addDays(new Date(), 1)
-                        }
-                    });
-
-                    throw new UnauthorizedException('email not verified. a new verification email has been sent');
-                }
-                
-                throw new UnauthorizedException('email not verified. please check your email to verify your account');
-            }
-
-            const { rawToken, hashedToken } = generateTokenWithHash();
-            await this.db.session.create({
-                data: {
-                    userId: findUser.id,
-                    token: hashedToken,
-                    expiredAt: addDays(new Date(), 7),
-                    ipAddress,
-                    userAgent
-                }
+        if (!findUser.verifiedAt) {
+            const existingVerification = await this.db.verification.findFirst({
+                where: { userId: findUser.id, type: 'emailVerification' }
             });
 
-            return { rawToken, user: { id: findUser.id, email: findUser.email, name: findUser.name } };
-        } else {
-            throw new BadRequestException('non-credentials not exist yet through this service');
+            if (!existingVerification || existingVerification.expiredAt < new Date()) {
+                if (existingVerification) {
+                    await this.db.verification.delete({ where: { id: existingVerification.id } });
+                }
+
+                const { rawToken, hashedToken } = generateTokenWithHash();
+                const redirectUrl = `${this.configService.getOrThrow<string>('FRONTEND_URL')}/email-verification?e=${email}&t=${rawToken}`;
+
+                await this.mailerService.emails.send({
+                    from: `NestJs-Backend <verification${this.configService.getOrThrow('APP_MAIL_NAME')}>`,
+                    to: email,
+                    subject: 'Email Verification',
+                    html: createTemplateEmailVerification({ email: email, redirectUrl })
+                });
+
+                await this.db.verification.create({
+                    data: {
+                        userId: findUser.id,
+                        type: 'emailVerification',
+                        tokenHash: hashedToken,
+                        expiredAt: addDays(new Date(), 1)
+                    }
+                });
+
+                throw new UnauthorizedException('email not verified. a new verification email has been sent');
+            }
+
+            throw new UnauthorizedException('email not verified. please check your email to verify your account');
         }
+
+        const { rawToken, hashedToken } = generateTokenWithHash();
+        await this.db.session.create({
+            data: {
+                userId: findUser.id,
+                token: hashedToken,
+                expiredAt: addDays(new Date(), 7),
+                ipAddress,
+                userAgent
+            }
+        });
+
+        return { rawToken, user: { id: findUser.id, email: findUser.email, name: findUser.name } };
     }
 
     /**
@@ -161,7 +154,7 @@ export class AuthService {
         const hashed = hashToken(sessionToken);
         const userSessionCache = this.sessionUserCache.get(hashed) || null;
         if (userSessionCache !== null) {
-            this.logger.debug('userSessionCache exist', userSessionCache);
+            this.l.debug('userSessionCache exist', userSessionCache);
             if (userSessionCache.expAt > new Date()) return userSessionCache.userPayload;
             if (userSessionCache.expAt < new Date()) this.sessionUserCache.delete(hashed);
         }
@@ -191,7 +184,7 @@ export class AuthService {
         };
 
         this.sessionUserCache.set(hashed, { expAt: addMinutes(new Date(), 15), userPayload: payload });
-        this.logger.debug('userSessionCache set', payload);
+        this.l.debug('userSessionCache set', payload);
         return payload;
     }
 
@@ -242,7 +235,7 @@ export class AuthService {
      */
     public async signOut(sessionToken: string): Promise<boolean> {
         const hashed = hashToken(sessionToken);
-        
+
         if (this.sessionUserCache.has(hashed)) {
             this.sessionUserCache.delete(hashed);
         }
@@ -253,5 +246,93 @@ export class AuthService {
         }
 
         return true;
+    }
+
+    public async googleSocialCallback({ code }: { code: string }) {
+        const tokenResponse = await fetch(this.configService.getOrThrow<string>('GOOGLE_FETCH_TOKEN_URL'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({
+                code,
+                client_id: this.configService.getOrThrow<string>('GOOGLE_CLIENT_ID'),
+                client_secret: this.configService.getOrThrow<string>('GOOGLE_CLIENT_SECRET'),
+                redirect_uri: this.configService.getOrThrow<string>('GOOGLE_REDIRECT_URI'),
+                grant_type: 'authorization_code'
+            })
+        });
+
+        if (!tokenResponse.ok) {
+            const error = await tokenResponse.text();
+            throw new UnauthorizedException('Failed to authenticate with Google', error);
+        }
+
+        const googleTokenResponse: GoogleTokenResponse = await tokenResponse.json();
+        const userInfoResponse = await fetch(this.configService.getOrThrow<string>('GOOGLE_FETCH_USER_INFO_URL'), {
+            headers: { Authorization: `Bearer ${googleTokenResponse.access_token}` }
+        });
+
+        if (!userInfoResponse.ok) throw new UnauthorizedException('Failed to retrieve Google user information');
+        const googleUserInfoResponse: GoogleUserInfoResponse = await userInfoResponse.json();
+
+        let userId: string | null = null;
+        const findUser = await this.db.user.findFirst({ where: { email: googleUserInfoResponse.email } });
+        if (findUser !== null) {
+            userId = findUser.id;
+            const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id, providerId: 'google' } });
+            if (findAccount !== null) {
+                await this.db.account.update({
+                    where: { userId_providerId: { userId: findUser.id, providerId: 'google' } },
+                    data: {
+                        accessToken: googleTokenResponse.access_token,
+                        refreshToken: googleTokenResponse.refresh_token,
+                        accessTokenExpiredAt: addSeconds(new Date(), googleTokenResponse.expires_in),
+                        scope: googleTokenResponse.scope,
+                        idToken: googleTokenResponse.id_token
+                    }
+                });
+            } else {
+                await this.db.account.create({
+                    data: {
+                        userId: findUser.id,
+                        accountId: googleUserInfoResponse.sub,
+                        providerId: 'google',
+                        accessToken: googleTokenResponse.access_token,
+                        refreshToken: googleTokenResponse.refresh_token,
+                        accessTokenExpiredAt: addSeconds(new Date(), googleTokenResponse.expires_in),
+                        scope: googleTokenResponse.scope,
+                        idToken: googleTokenResponse.id_token
+                    }
+                });
+            }
+        } else {
+            await this.db.$transaction(async tx => {
+                const newUser = await tx.user.create({
+                    data: {
+                        name: googleUserInfoResponse.name,
+                        email: googleUserInfoResponse.email,
+                        image: googleUserInfoResponse.picture,
+                        verifiedAt: new Date()
+                    }
+                });
+
+                userId = newUser.id;
+                return await tx.account.create({
+                    data: {
+                        userId: newUser.id,
+                        accountId: googleUserInfoResponse.sub,
+                        providerId: 'google',
+                        accessToken: googleTokenResponse.access_token,
+                        refreshToken: googleTokenResponse.refresh_token,
+                        accessTokenExpiredAt: addSeconds(new Date(), googleTokenResponse.expires_in),
+                        scope: googleTokenResponse.scope,
+                        idToken: googleTokenResponse.id_token
+                    }
+                });
+            });
+        }
+
+        const { rawToken, hashedToken } = generateTokenWithHash();
+        await this.db.session.create({ data: { userId: userId!, token: hashedToken, expiredAt: addDays(new Date(), 7) } });
+        return { rawToken };
     }
 }

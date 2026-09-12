@@ -1,4 +1,4 @@
-import { NestFactory } from '@nestjs/core';
+import { NestFactory, Reflector } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import 'dotenv/config';
@@ -21,7 +21,7 @@ async function bootstrap() {
     app.use(cookieParser());
     app.useGlobalPipes(new HttpCustomValidationPipe());
     app.useGlobalFilters(new HttpExceptionFilter());
-    app.useGlobalInterceptors(new HttpResponseInterceptor());
+    app.useGlobalInterceptors(new HttpResponseInterceptor(app.get(Reflector)));
 
     app.enableCors({
         origin: [process.env.FRONTEND_URL],

@@ -23,7 +23,7 @@ export class SignUpReqDto {
     @IsNotEmpty({ message: 'Provider must not be empty' })
     @IsString({ message: 'Provider must be a string' })
     @IsEnum(['credentials', 'google'], { message: "Provider must be 'credentials' or 'google'" })
-    providerId: 'credentials' | 'socials';
+    providerId: 'credentials' | 'google';
 }
 
 export class SignInReqDto {
@@ -42,7 +42,7 @@ export class SignInReqDto {
     @IsNotEmpty({ message: 'Provider must not be empty' })
     @IsString({ message: 'Provider must be a string' })
     @IsEnum(['credentials', 'google'], { message: "Provider must be 'credentials' or 'google'" })
-    providerId: 'credentials' | 'socials';
+    providerId: 'credentials' | 'google';
 }
 
 export class ConfirmVerificationReqDto {

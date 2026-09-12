@@ -33,16 +33,23 @@ export function hashToken(rawToken: string) {
  * @param response The Express response object.
  * @param token The raw session token to store in the cookie.
  */
-export function setSessionCookie(response: Response, token: string): void {
+type SetSessionCookie = {
+    response: Response;
+    token: string;
+    cookieName: string;
+    maxAge: number;
+};
+
+export function setSessionCookie(params: SetSessionCookie): void {
     if (appEnv === undefined) throw new Error('appEnv not found');
     const isProduction = appEnv === 'production';
 
-    response.cookie('nestsession', token, {
+    params.response.cookie(`${params.cookieName}`, params.token, {
         httpOnly: true,
         secure: isProduction,
         sameSite: 'lax',
         domain: !isProduction ? 'localhost' : '.neststarterkit.cloud',
-        maxAge: 7 * 24 * 60 * 60 * 1000,
+        maxAge: params.maxAge,
         path: '/'
     });
 }
@@ -52,11 +59,16 @@ export function setSessionCookie(response: Response, token: string): void {
  * Uses the same domain and path settings as the set cookie to ensure successful deletion.
  * @param response The Express response object.
  */
-export function clearSessionCookie(response: Response): void {
+type ClearSessionCookie = {
+    response: Response;
+    cookieName: string;
+};
+
+export function clearSessionCookie(params: ClearSessionCookie): void {
     if (appEnv === undefined) throw new Error('appEnv not found');
     const isProduction = appEnv === 'production';
 
-    response.clearCookie('nestsession', {
+    params.response.clearCookie(`${params.cookieName}`, {
         httpOnly: true,
         secure: isProduction,
         sameSite: 'lax',
