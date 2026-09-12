@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, Inject, Injectable, Logger, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { addDays, addMinutes, addSeconds } from 'date-fns';
@@ -20,7 +20,6 @@ type SessionUserCache = {
 @Injectable()
 export class AuthService {
     private readonly sessionUserCache = new Map<string, SessionUserCache>();
-    private readonly l = new Logger(AuthService.name);
 
     constructor(
         @Inject(dbService) private readonly db: DbService,
@@ -39,9 +38,17 @@ export class AuthService {
         const findUser = await this.db.user.findFirst({ where: { email } });
 
         if (findUser !== null) {
-            const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id, providerId: 'credentials' } });
-            if (findAccount !== null) throw new ConflictException('account with associated user already exist');
-            // todo
+            const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id } });
+            if (findAccount !== null && findAccount.providerId === 'credentials') {
+                throw new ConflictException('account with associated user already exist');
+            }
+            /**
+             *  --FuturePlan
+             *  if account is find, and the providerId is not "credentials"
+             *  then just link user account with password
+             * 
+                if (findAccount !== null && findAccount.providerId !== 'credentials') {}
+             */
         }
 
         const newUserAccount = await this.db.$transaction(async tx => {
@@ -154,7 +161,6 @@ export class AuthService {
         const hashed = hashToken(sessionToken);
         const userSessionCache = this.sessionUserCache.get(hashed) || null;
         if (userSessionCache !== null) {
-            this.l.debug('userSessionCache exist', userSessionCache);
             if (userSessionCache.expAt > new Date()) return userSessionCache.userPayload;
             if (userSessionCache.expAt < new Date()) this.sessionUserCache.delete(hashed);
         }
@@ -184,7 +190,6 @@ export class AuthService {
         };
 
         this.sessionUserCache.set(hashed, { expAt: addMinutes(new Date(), 15), userPayload: payload });
-        this.l.debug('userSessionCache set', payload);
         return payload;
     }
 
@@ -248,7 +253,14 @@ export class AuthService {
         return true;
     }
 
-    public async googleSocialCallback({ code }: { code: string }) {
+    /**
+     * Handles the callback from Google OAuth2, fetches user information, and registers or logs in the user.
+     * @param param0 Object containing the authorization code, IP address, and user agent.
+     * @returns An object containing the new raw session token.
+     * @throws UnauthorizedException if Google authentication fails or user info cannot be retrieved.
+     * @throws NotFoundException if the default user role is not found.
+     */
+    public async googleSocialCallback({ code, ipAddress, userAgent }: { code: string; ipAddress?: string; userAgent?: string }) {
         const tokenResponse = await fetch(this.configService.getOrThrow<string>('GOOGLE_FETCH_TOKEN_URL'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -274,11 +286,13 @@ export class AuthService {
         if (!userInfoResponse.ok) throw new UnauthorizedException('Failed to retrieve Google user information');
         const googleUserInfoResponse: GoogleUserInfoResponse = await userInfoResponse.json();
 
+        // find user
         let userId: string | null = null;
         const findUser = await this.db.user.findFirst({ where: { email: googleUserInfoResponse.email } });
         if (findUser !== null) {
             userId = findUser.id;
             const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id, providerId: 'google' } });
+            // find account
             if (findAccount !== null) {
                 await this.db.account.update({
                     where: { userId_providerId: { userId: findUser.id, providerId: 'google' } },
@@ -290,7 +304,9 @@ export class AuthService {
                         idToken: googleTokenResponse.id_token
                     }
                 });
-            } else {
+            }
+            // if account not find
+            else {
                 await this.db.account.create({
                     data: {
                         userId: findUser.id,
@@ -304,7 +320,9 @@ export class AuthService {
                     }
                 });
             }
-        } else {
+        }
+        // if user not find
+        else {
             await this.db.$transaction(async tx => {
                 const newUser = await tx.user.create({
                     data: {
@@ -316,7 +334,7 @@ export class AuthService {
                 });
 
                 userId = newUser.id;
-                return await tx.account.create({
+                await tx.account.create({
                     data: {
                         userId: newUser.id,
                         accountId: googleUserInfoResponse.sub,
@@ -328,11 +346,17 @@ export class AuthService {
                         idToken: googleTokenResponse.id_token
                     }
                 });
+
+                const findRole = await tx.role.findFirst({ where: { name: 'user' } });
+                if (findRole === null) throw new NotFoundException('role is not found');
+
+                await tx.userRole.create({ data: { userId: newUser.id, roleId: findRole.id } });
+                return { userId: newUser.id, name: newUser.name, email: newUser.email, role: findRole.name };
             });
         }
 
         const { rawToken, hashedToken } = generateTokenWithHash();
-        await this.db.session.create({ data: { userId: userId!, token: hashedToken, expiredAt: addDays(new Date(), 7) } });
+        await this.db.session.create({ data: { userId: userId!, ipAddress, userAgent, token: hashedToken, expiredAt: addDays(new Date(), 7) } });
         return { rawToken };
     }
 }

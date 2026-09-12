@@ -21,8 +21,6 @@ export type MailerService = Resend;
             useFactory: (c: ConfigService) => {
                 const resendApiKey = c.getOrThrow<string>('RESEND_API_KEY');
                 const resend = new Resend(resendApiKey);
-
-                console.log('mailer module mounted');
                 return resend;
             }
         }

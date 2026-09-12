@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Logger, Post, Query, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, Req, Res, UnauthorizedException, UseGuards } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { type Request, type Response } from 'express';
@@ -14,8 +14,6 @@ import { SkipResponseInterceptor } from '../utils/interceptors.js';
 @ApiTags('Auth')
 @Controller('auth')
 export class AuthController {
-    private readonly l = new Logger(AuthController.name);
-
     constructor(
         private readonly authService: AuthService,
         private readonly configService: ConfigService
@@ -126,7 +124,15 @@ export class AuthController {
         return { message: 'sign-out success' };
     }
 
+    /**
+     * Initiates Google OAuth2 sign-in flow.
+     * Redirects the user to Google's authorization page.
+     * @param response The outgoing Express response, used for redirection and setting temporary cookie.
+     * @returns A redirection to Google's authorization URL.
+     */
     @Get('google')
+    @ApiOperation({ summary: 'Initiate Google sign-in' })
+    @ApiResponse({ status: 302, description: 'Redirects to Google OAuth authorization URL.' })
     @SkipResponseInterceptor()
     public async googleSocialSignIn(@Res({ passthrough: true }) response: Response) {
         const { rawToken, hashedToken } = generateTokenWithHash();
@@ -149,7 +155,19 @@ export class AuthController {
         return response.redirect(authorizationUrl.toString());
     }
 
+    /**
+     * Handles the callback from Google OAuth2 sign-in.
+     * Validates the state, exchanges the authorization code for tokens, and establishes a user session.
+     * @param code The authorization code from Google.
+     * @param state The state token from Google, used for CSRF protection.
+     * @param req The incoming Express request, used to extract IP and user agent.
+     * @param res The outgoing Express response, used to set the session cookie and redirect.
+     * @returns A redirection to the frontend's profile/me page.
+     */
     @Get('google/callback')
+    @ApiOperation({ summary: 'Handle Google sign-in callback' })
+    @ApiResponse({ status: 302, description: 'Redirects to the frontend after successfully authenticating and setting session cookie.' })
+    @ApiResponse({ status: 401, description: 'Unauthorized (invalid state, missing code/state, etc.).' })
     @SkipResponseInterceptor()
     public async googleSocialCallback(@Query('code') code: string, @Query('state') state: string, @Req() req: Request, @Res({ passthrough: true }) res: Response) {
         if (!code || !state) throw new UnauthorizedException('[Code, State] not Found');
@@ -165,7 +183,10 @@ export class AuthController {
             cookieName: this.configService.getOrThrow<string>('GOOGLE_TOKEN_EXCHANGE_COOKIE_NAME')
         });
 
-        const newOrUpdateUserAccount = await this.authService.googleSocialCallback({ code });
+        const ipAddress = req.ip;
+        const userAgent = req.headers['user-agent'];
+
+        const newOrUpdateUserAccount = await this.authService.googleSocialCallback({ code, ipAddress, userAgent });
         setSessionCookie({
             response: res,
             token: newOrUpdateUserAccount.rawToken,

@@ -15,7 +15,7 @@ import { HttpResponseInterceptor } from './utils/interceptors.js';
 async function bootstrap() {
     const app = await NestFactory.create(AppModule, {
         instrument: ObserveInstrument,
-        logger: ['log', 'error', 'warn', 'debug', 'verbose']
+        logger: false
     });
 
     app.use(cookieParser());

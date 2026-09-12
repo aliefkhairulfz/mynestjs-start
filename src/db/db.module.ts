@@ -31,8 +31,6 @@ export type DbService = PrismaClient<never, GlobalOmitConfig | undefined, Defaul
                 });
 
                 const newPrisma = new PrismaClient({ adapter });
-                console.log('db module mounted');
-
                 return newPrisma;
             }
         }
