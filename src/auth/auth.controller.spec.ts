@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
+import { ConfigService } from '@nestjs/config';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import type { Request, Response } from 'express';
 import { AuthGuard } from '../utils/guard.js';
@@ -20,7 +21,14 @@ describe('AuthController', () => {
                         signIn: vi.fn(),
                         getUser: vi.fn(),
                         confirmVerification: vi.fn(),
+                        resendVerification: vi.fn(),
                         signOut: vi.fn()
+                    }
+                },
+                {
+                    provide: ConfigService,
+                    useValue: {
+                        getOrThrow: vi.fn().mockReturnValue('mock-value')
                     }
                 }
             ]
@@ -54,9 +62,7 @@ describe('AuthController', () => {
         const result = { rawToken: 'token', user: { id: '1', email: 'test@example.com', name: 'Test' } };
         vi.spyOn(authService, 'signIn').mockResolvedValue(result);
 
-        // mock setSessionCookie behavior? We can't easily mock the external utility inside controller directly unless we mock the module.
-        // But since the controller calls setSessionCookie(res, data.rawToken), it will call res.cookie.
-        process.env.APP_ENV = 'development'; // to avoid thrown error in setSessionCookie
+        process.env.APP_ENV = 'development';
 
         const response = await controller.signIn(dto, req, res);
         expect(authService.signIn).toHaveBeenCalledWith({
@@ -77,7 +83,7 @@ describe('AuthController', () => {
     });
 
     it('should call confirmVerification', async () => {
-        const dto = { email: 'test@example.com', token: 'token' };
+        const dto = { email: 'test@example.com', otp: '123456' };
         vi.spyOn(authService, 'confirmVerification').mockResolvedValue({ email: 'test@example.com' });
 
         const response = await controller.confirmVerification(dto);
@@ -85,11 +91,20 @@ describe('AuthController', () => {
         expect(response).toEqual({ data: { email: 'test@example.com' }, message: 'email verification success' });
     });
 
+    it('should call resendVerification', async () => {
+        const dto = { email: 'test@example.com' };
+        vi.spyOn(authService, 'resendVerification').mockResolvedValue({ email: 'test@example.com' });
+
+        const response = await controller.resendVerification(dto);
+        expect(authService.resendVerification).toHaveBeenCalledWith(dto);
+        expect(response).toEqual({ data: { email: 'test@example.com' }, message: 'email verification resent success' });
+    });
+
     it('should call signOut and clear cookie', async () => {
         const req = { withUser: { sessionToken: 'token' } } as unknown as Request;
         const res = { clearCookie: vi.fn() } as unknown as Response;
         
-        process.env.APP_ENV = 'development'; // to avoid thrown error in clearSessionCookie
+        process.env.APP_ENV = 'development';
         
         const response = await controller.signOut(req, res);
         expect(authService.signOut).toHaveBeenCalledWith('token');

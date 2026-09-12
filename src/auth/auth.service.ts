@@ -6,7 +6,7 @@ import { type DbService, dbService } from '../db/db.module.js';
 import { type MailerService, mailerService } from '../mailer/mailer.module.js';
 import createTemplateEmailVerification from '../templates/email-verification.js';
 import { GoogleTokenResponse, GoogleUserInfoResponse, UserSessionData } from '../utils/types.js';
-import { generateTokenWithHash, hashToken } from '../utils/utils.js';
+import { generateOTP, generateTokenWithHash, hashToken } from '../utils/utils.js';
 
 /**
  * Service responsible for managing user authentication, sessions, and verifications.
@@ -64,21 +64,21 @@ export class AuthService {
             return { userId: newUser.id, name: newUser.name, email: newUser.email, role: findRole.name };
         });
 
-        const { rawToken, hashedToken } = generateTokenWithHash();
-        const redirectUrl = `${this.configService.getOrThrow<string>('FRONTEND_URL')}/email-verification?e=${email}&t=${rawToken}`;
+        const rawOtp = generateOTP();
+        const hashedOtp = hashToken(rawOtp);
         await this.mailerService.emails.send({
             from: `NestJs-Backend <verification${this.configService.getOrThrow('APP_MAIL_NAME')}>`,
             to: email,
             subject: 'Email Verification',
-            html: createTemplateEmailVerification({ email: email, redirectUrl })
+            html: createTemplateEmailVerification({ email: email, otp: rawOtp })
         });
 
         await this.db.verification.create({
             data: {
                 userId: newUserAccount.userId,
                 type: 'emailVerification',
-                tokenHash: hashedToken,
-                expiredAt: addDays(new Date(), 1)
+                tokenHash: hashedOtp,
+                expiredAt: addMinutes(new Date(), 15)
             }
         });
 
@@ -112,22 +112,22 @@ export class AuthService {
                     await this.db.verification.delete({ where: { id: existingVerification.id } });
                 }
 
-                const { rawToken, hashedToken } = generateTokenWithHash();
-                const redirectUrl = `${this.configService.getOrThrow<string>('FRONTEND_URL')}/email-verification?e=${email}&t=${rawToken}`;
+                const rawOtp = generateOTP();
+                const hashedOtp = hashToken(rawOtp);
 
                 await this.mailerService.emails.send({
                     from: `NestJs-Backend <verification${this.configService.getOrThrow('APP_MAIL_NAME')}>`,
                     to: email,
                     subject: 'Email Verification',
-                    html: createTemplateEmailVerification({ email: email, redirectUrl })
+                    html: createTemplateEmailVerification({ email: email, otp: rawOtp })
                 });
 
                 await this.db.verification.create({
                     data: {
                         userId: findUser.id,
                         type: 'emailVerification',
-                        tokenHash: hashedToken,
-                        expiredAt: addDays(new Date(), 1)
+                        tokenHash: hashedOtp,
+                        expiredAt: addMinutes(new Date(), 15)
                     }
                 });
 
@@ -200,8 +200,8 @@ export class AuthService {
      * @returns The verified user's email.
      * @throws BadRequestException if the token is invalid or expired.
      */
-    public async confirmVerification({ email, token }: { email: string; token: string }) {
-        const hashed = hashToken(token);
+    public async confirmVerification({ email, otp }: { email: string; otp: string }) {
+        const hashed = hashToken(otp);
 
         const verification = await this.db.verification.findFirst({
             where: {
@@ -231,6 +231,51 @@ export class AuthService {
         });
 
         return { email: verification.user.email };
+    }
+
+    /**
+     * Resends the email verification OTP.
+     * @param param0 Object containing the user's email.
+     * @returns A success message.
+     * @throws NotFoundException if the user is not found.
+     * @throws BadRequestException if the user is already verified.
+     */
+    public async resendVerification({ email }: { email: string }) {
+        const findUser = await this.db.user.findFirst({ where: { email } });
+        if (!findUser) throw new NotFoundException('user not found');
+
+        if (findUser.verifiedAt) {
+            throw new BadRequestException('email already verified');
+        }
+
+        const existingVerification = await this.db.verification.findFirst({
+            where: { userId: findUser.id, type: 'emailVerification' }
+        });
+
+        if (existingVerification) {
+            await this.db.verification.delete({ where: { id: existingVerification.id } });
+        }
+
+        const rawOtp = generateOTP();
+        const hashedOtp = hashToken(rawOtp);
+
+        await this.mailerService.emails.send({
+            from: `NestJs-Backend <verification${this.configService.getOrThrow('APP_MAIL_NAME')}>`,
+            to: email,
+            subject: 'Email Verification',
+            html: createTemplateEmailVerification({ email: email, otp: rawOtp })
+        });
+
+        await this.db.verification.create({
+            data: {
+                userId: findUser.id,
+                type: 'emailVerification',
+                tokenHash: hashedOtp,
+                expiredAt: addMinutes(new Date(), 15)
+            }
+        });
+
+        return { email };
     }
 
     /**

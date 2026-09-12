@@ -5,8 +5,8 @@ import { mailerService } from '../mailer/mailer.module.js';
 import { ConfigService } from '@nestjs/config';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as bcrypt from 'bcrypt';
-import { UnauthorizedException, BadRequestException } from '@nestjs/common';
-import { generateTokenWithHash, hashToken } from '../utils/utils.js';
+import { UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
+import { generateTokenWithHash, hashToken, generateOTP } from '../utils/utils.js';
 
 vi.mock('bcrypt');
 vi.mock('../utils/utils.js', async importOriginal => {
@@ -14,7 +14,8 @@ vi.mock('../utils/utils.js', async importOriginal => {
     return {
         ...mod,
         generateTokenWithHash: vi.fn(),
-        hashToken: vi.fn()
+        hashToken: vi.fn(),
+        generateOTP: vi.fn()
     };
 });
 
@@ -27,7 +28,7 @@ describe('AuthService', () => {
     beforeEach(async () => {
         dbMock = {
             user: { findFirst: vi.fn(), update: vi.fn(), create: vi.fn() },
-            account: { findFirst: vi.fn(), create: vi.fn() },
+            account: { findFirst: vi.fn(), create: vi.fn(), update: vi.fn() },
             session: { findFirst: vi.fn(), create: vi.fn(), delete: vi.fn() },
             verification: { findFirst: vi.fn(), create: vi.fn(), delete: vi.fn() },
             role: { findFirst: vi.fn() },
@@ -86,7 +87,8 @@ describe('AuthService', () => {
             dbMock.account.findFirst.mockResolvedValue({ password: 'hashed' });
             vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
             dbMock.verification.findFirst.mockResolvedValue({ id: 'v1', expiredAt: new Date(Date.now() - 10000) }); // expired
-            vi.mocked(generateTokenWithHash).mockReturnValue({ rawToken: 'raw', hashedToken: 'hashed' });
+            vi.mocked(generateOTP).mockReturnValue('123456');
+            vi.mocked(hashToken).mockReturnValue('hashed');
 
             await expect(service.signIn({ email: 'test@test.com', password: 'password', providerId: 'credentials' })).rejects.toThrow('email not verified. a new verification email has been sent');
 
@@ -114,7 +116,7 @@ describe('AuthService', () => {
             vi.mocked(hashToken).mockReturnValue('hashed');
             dbMock.verification.findFirst.mockResolvedValue(null);
 
-            await expect(service.confirmVerification({ email: 'test@test.com', token: 'token' })).rejects.toThrow(BadRequestException);
+            await expect(service.confirmVerification({ email: 'test@test.com', otp: '123456' })).rejects.toThrow(BadRequestException);
         });
 
         it('should confirm verification and delete token', async () => {
@@ -124,10 +126,36 @@ describe('AuthService', () => {
             vi.mocked(hashToken).mockReturnValue('hashed');
             dbMock.verification.findFirst.mockResolvedValue({ id: '1', userId: 'user1', expiredAt: dateInFuture, user: { email: 'test@test.com' } });
 
-            const result = await service.confirmVerification({ email: 'test@test.com', token: 'token' });
+            const result = await service.confirmVerification({ email: 'test@test.com', otp: '123456' });
 
             expect(dbMock.user.update).toHaveBeenCalledWith({ where: { id: 'user1' }, data: { verifiedAt: expect.any(Date) } });
             expect(dbMock.verification.delete).toHaveBeenCalledWith({ where: { id: '1' } });
+            expect(result).toEqual({ email: 'test@test.com' });
+        });
+    });
+
+    describe('resendVerification', () => {
+        it('should throw if user not found', async () => {
+            dbMock.user.findFirst.mockResolvedValue(null);
+            await expect(service.resendVerification({ email: 'test@test.com' })).rejects.toThrow(NotFoundException);
+        });
+
+        it('should throw if email already verified', async () => {
+            dbMock.user.findFirst.mockResolvedValue({ id: '1', verifiedAt: new Date() });
+            await expect(service.resendVerification({ email: 'test@test.com' })).rejects.toThrow(BadRequestException);
+        });
+
+        it('should delete existing verification and create a new one', async () => {
+            dbMock.user.findFirst.mockResolvedValue({ id: '1', verifiedAt: null });
+            dbMock.verification.findFirst.mockResolvedValue({ id: 'old-v' });
+            vi.mocked(generateOTP).mockReturnValue('123456');
+            vi.mocked(hashToken).mockReturnValue('hashed');
+
+            const result = await service.resendVerification({ email: 'test@test.com' });
+
+            expect(dbMock.verification.delete).toHaveBeenCalledWith({ where: { id: 'old-v' } });
+            expect(mailerMock.emails.send).toHaveBeenCalled();
+            expect(dbMock.verification.create).toHaveBeenCalled();
             expect(result).toEqual({ email: 'test@test.com' });
         });
     });

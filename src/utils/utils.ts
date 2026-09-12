@@ -1,4 +1,4 @@
-import { createHmac, randomBytes } from 'crypto';
+import { createHmac, randomBytes, randomInt } from 'crypto';
 import 'dotenv/config';
 import { Response } from 'express';
 
@@ -25,6 +25,14 @@ export function generateTokenWithHash() {
 export function hashToken(rawToken: string) {
     if (authSecret === undefined) throw new Error('authSecret not found');
     return createHmac('sha256', authSecret).update(rawToken).digest('hex');
+}
+
+/**
+ * Generates a cryptographically secure 6-digit numeric OTP.
+ * @returns A string representing the 6-digit OTP.
+ */
+export function generateOTP(): string {
+    return randomInt(100000, 1000000).toString();
 }
 
 /**

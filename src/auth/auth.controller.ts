@@ -5,7 +5,7 @@ import { type Request, type Response } from 'express';
 import { AuthGuard } from '../utils/guard.js';
 import { clearSessionCookie, generateTokenWithHash, hashToken, setSessionCookie } from '../utils/utils.js';
 import { AuthService } from './auth.service.js';
-import { ConfirmVerificationReqDto, ConfirmVerificationResDto, GetUserResDto, SignInReqDto, SignInResDto, SignUpReqDto, SignUpResDto } from './dto/auth.dto.js';
+import { ConfirmVerificationReqDto, ConfirmVerificationResDto, GetUserResDto, ResendVerificationReqDto, SignInReqDto, SignInResDto, SignUpReqDto, SignUpResDto } from './dto/auth.dto.js';
 import { SkipResponseInterceptor } from '../utils/interceptors.js';
 
 /**
@@ -96,8 +96,23 @@ export class AuthController {
     @ApiResponse({ status: 200, type: ConfirmVerificationResDto, description: 'Email successfully verified. Verification token is removed and user is marked as verified.' })
     @ApiResponse({ status: 400, description: 'Bad Request.' })
     public async confirmVerification(@Body() dto: ConfirmVerificationReqDto) {
-        const data = await this.authService.confirmVerification({ email: dto.email, token: dto.token });
+        const data = await this.authService.confirmVerification({ email: dto.email, otp: dto.otp });
         return { data, message: 'email verification success' };
+    }
+
+    /**
+     * Resends the verification OTP email.
+     * @param dto Data transfer object containing the email.
+     * @returns A success message.
+     */
+    @Post('resend-verification')
+    @HttpCode(HttpStatus.OK)
+    @ApiOperation({ summary: 'Resend email verification OTP' })
+    @ApiResponse({ status: 200, description: 'Email verification OTP successfully resent.' })
+    @ApiResponse({ status: 400, description: 'Bad Request.' })
+    public async resendVerification(@Body() dto: ResendVerificationReqDto) {
+        const data = await this.authService.resendVerification({ email: dto.email });
+        return { data, message: 'email verification resent success' };
     }
 
     /**
@@ -193,6 +208,6 @@ export class AuthController {
             cookieName: this.configService.getOrThrow<string>('SESSION_COOKIE_NAME'),
             maxAge: 7 * 24 * 60 * 60 * 1000
         });
-        return res.redirect(`${this.configService.getOrThrow<string>('FRONTEND_URL')}/me`);
+        return res.redirect(`${this.configService.getOrThrow<string>('FRONTEND_URL')}/dashboard`);
     }
 }

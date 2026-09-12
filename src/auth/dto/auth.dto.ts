@@ -51,10 +51,17 @@ export class ConfirmVerificationReqDto {
     @IsEmail({}, { message: 'Invalid email' })
     email: string;
 
-    @ApiProperty({ example: '123456', description: 'Email verification token' })
-    @IsNotEmpty({ message: 'Token must not be empty' })
-    @IsString({ message: 'Token must be a string' })
-    token: string;
+    @ApiProperty({ example: '123456', description: 'Email verification OTP' })
+    @IsNotEmpty({ message: 'OTP must not be empty' })
+    @IsString({ message: 'OTP must be a string' })
+    otp: string;
+}
+
+export class ResendVerificationReqDto {
+    @ApiProperty({ example: 'john@example.com', description: 'User email address' })
+    @IsNotEmpty({ message: 'Email must not be empty' })
+    @IsEmail({}, { message: 'Invalid email' })
+    email: string;
 }
 
 export class SignUpDataDto {

@@ -1,10 +1,10 @@
 type EmailVerificationParams = {
-    redirectUrl: string;
+    otp: string;
     email: string;
 };
 
 export default function createTemplateEmailVerification(params: EmailVerificationParams): string {
-    const { redirectUrl, email } = params;
+    const { otp, email } = params;
 
     return `<!DOCTYPE html>
             <html lang="en">
@@ -54,39 +54,25 @@ export default function createTemplateEmailVerification(params: EmailVerificatio
                         margin-bottom: 32px;
                     }
 
-                    .btn {
-                        display: inline-block;
+                    .otp-container {
                         background-color: #f1f1ef;
+                        padding: 16px 24px;
+                        border-radius: 8px;
+                        margin-bottom: 32px;
+                        text-align: center;
+                    }
+
+                    .otp-code {
+                        font-size: 32px;
+                        font-weight: 700;
+                        letter-spacing: 0.1em;
                         color: #37352f;
-                        text-decoration: none;
-                        font-size: 13px;
-                        font-weight: 500;
-                        padding: 9px 18px;
-                        border-radius: 5px;
-                        letter-spacing: -0.01em;
                     }
 
                     .divider {
                         border: none;
                         border-top: 1px solid #e9e9e7;
                         margin: 36px 0;
-                    }
-
-                    .fallback-label {
-                        font-size: 11px;
-                        font-weight: 500;
-                        text-transform: uppercase;
-                        letter-spacing: 0.06em;
-                        color: #9b9a97;
-                        margin-bottom: 6px;
-                    }
-
-                    .fallback-url {
-                        font-size: 12px;
-                        color: #9b9a97;
-                        word-break: break-all;
-                        line-height: 1.6;
-                        text-decoration: none;
                     }
 
                     .footer {
@@ -104,20 +90,19 @@ export default function createTemplateEmailVerification(params: EmailVerificatio
 
                     <h1>Verify your email</h1>
                     <p class="subtitle">
-                        We sent this link to <strong style="color:#37352f; font-weight:500;">${email}</strong>.
-                        Confirm your address to activate your account.
+                        We sent this code to <strong style="color:#37352f; font-weight:500;">${email}</strong>.
+                        Enter it to activate your account.
                     </p>
 
-                    <a href="${redirectUrl}" class="btn">Verify email</a>
+                    <div class="otp-container">
+                        <div class="otp-code">${otp}</div>
+                    </div>
 
                     <hr class="divider" />
 
-                    <p class="fallback-label">Or copy this link</p>
-                    <a href="${redirectUrl}" class="fallback-url">${redirectUrl}</a>
-
                     <p class="footer">
                         If you didn't create an account, ignore this email.<br />
-                        This link expires in 24 hours.
+                        This code expires in 15 minutes.
                     </p>
 
                 </div>
