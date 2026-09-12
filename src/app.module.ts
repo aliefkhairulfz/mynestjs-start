@@ -1,4 +1,5 @@
 import { ScheduleModule } from '@nestjs/schedule';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { CronModule } from './cron/cron.module.js';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -14,11 +15,8 @@ export const { ObserveModule, ObserveInstrument } = createObserveModule();
         // Distributed tracing, auto-correlated logs, request/job metrics, error
         // telemetry, alarms, and more — out of the box. Sign up at https://observe.nestjs.com
         ConfigModule.forRoot({ isGlobal: true }),
-        ObserveModule.forRoot({
-            appKey: 'YOUR_APP_KEY',
-            appSecret: 'YOUR_APP_SECRET',
-            serviceId: 'nestjs-start-kit'
-        }),
+        ObserveModule.forRoot({ appKey: 'YOUR_APP_KEY', appSecret: 'YOUR_APP_SECRET', serviceId: 'nestjs-start-kit' }),
+        ThrottlerModule.forRoot({ throttlers: [{ ttl: 60000, limit: 100 }] }),
         ScheduleModule.forRoot(),
         CronModule,
         DbModule,
