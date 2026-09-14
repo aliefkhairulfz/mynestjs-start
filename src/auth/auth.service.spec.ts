@@ -59,7 +59,7 @@ describe('AuthService', () => {
     describe('signIn', () => {
         it('should throw if user not found', async () => {
             dbMock.user.findFirst.mockResolvedValue(null);
-            await expect(service.signIn({ email: 'test@test.com', password: 'password', providerId: 'credentials' })).rejects.toThrow(UnauthorizedException);
+            await expect(service.signIn({ email: 'test@test.com', password: 'password', providerId: 'CREDENTIALS' })).rejects.toThrow(UnauthorizedException);
         });
 
         it('should throw if password does not match', async () => {
@@ -67,7 +67,7 @@ describe('AuthService', () => {
             dbMock.account.findFirst.mockResolvedValue({ password: 'hashed' });
             vi.mocked(bcrypt.compare).mockResolvedValue(false as never);
 
-            await expect(service.signIn({ email: 'test@test.com', password: 'password', providerId: 'credentials' })).rejects.toThrow(UnauthorizedException);
+            await expect(service.signIn({ email: 'test@test.com', password: 'password', providerId: 'CREDENTIALS' })).rejects.toThrow(UnauthorizedException);
         });
 
         it('should create session and return raw token', async () => {
@@ -76,7 +76,7 @@ describe('AuthService', () => {
             vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
             vi.mocked(generateTokenWithHash).mockReturnValue({ rawToken: 'raw', hashedToken: 'hashed' });
 
-            const result = await service.signIn({ email: 'test@test.com', password: 'password', providerId: 'credentials' });
+            const result = await service.signIn({ email: 'test@test.com', password: 'password', providerId: 'CREDENTIALS' });
 
             expect(dbMock.session.create).toHaveBeenCalled();
             expect(result).toEqual({ rawToken: 'raw', user: { id: '1', email: 'test@test.com', name: 'Test' } });
@@ -90,7 +90,7 @@ describe('AuthService', () => {
             vi.mocked(generateOTP).mockReturnValue('123456');
             vi.mocked(hashToken).mockReturnValue('hashed');
 
-            await expect(service.signIn({ email: 'test@test.com', password: 'password', providerId: 'credentials' })).rejects.toThrow('email not verified. a new verification email has been sent');
+            await expect(service.signIn({ email: 'test@test.com', password: 'password', providerId: 'CREDENTIALS' })).rejects.toThrow('email not verified. a new verification email has been sent');
 
             expect(dbMock.verification.delete).toHaveBeenCalledWith({ where: { id: 'v1' } });
             expect(mailerMock.emails.send).toHaveBeenCalled();
@@ -103,7 +103,7 @@ describe('AuthService', () => {
             vi.mocked(bcrypt.compare).mockResolvedValue(true as never);
             dbMock.verification.findFirst.mockResolvedValue({ id: 'v1', expiredAt: new Date(Date.now() + 100000) }); // not expired
 
-            await expect(service.signIn({ email: 'test@test.com', password: 'password', providerId: 'credentials' })).rejects.toThrow('email not verified. please check your email to verify your account');
+            await expect(service.signIn({ email: 'test@test.com', password: 'password', providerId: 'CREDENTIALS' })).rejects.toThrow('email not verified. please check your email to verify your account');
 
             expect(dbMock.verification.delete).not.toHaveBeenCalled();
             expect(mailerMock.emails.send).not.toHaveBeenCalled();

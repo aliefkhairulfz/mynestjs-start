@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, SetMetadata, UnauthorizedExc
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { AuthService } from '../auth/auth.service.js';
+import { ConfigService } from '@nestjs/config';
 
 export const AuthGuardsIsOptional = () => SetMetadata('optional', true);
 
@@ -14,7 +15,8 @@ export const AuthGuardsIsOptional = () => SetMetadata('optional', true);
 export class AuthGuard implements CanActivate {
     constructor(
         private readonly authService: AuthService,
-        private readonly reflector: Reflector
+        private readonly reflector: Reflector,
+        private readonly configService: ConfigService
     ) {}
 
     async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -29,16 +31,17 @@ export class AuthGuard implements CanActivate {
     }
 
     private extractToken(req: Request) {
-        const sessionToken = req.cookies['nestsession'] as string | undefined;
+        const sessionToken = req.cookies[this.configService.getOrThrow<string>('SESSION_COOKIE_NAME')] as string | undefined;
         if (!sessionToken || sessionToken === undefined) throw new UnauthorizedException('session token not found');
         return sessionToken;
     }
 }
 
 export enum Role {
-    User = 'user',
-    Admin = 'admin',
-    Superadmin = 'superadmin'
+    USER = 'USER',
+    CREATOR = 'CREATOR',
+    ADMIN = 'ADMIN',
+    SUPERADMIN = 'SUPERADMIN'
 }
 
 export const ROLES_KEY = 'roles';

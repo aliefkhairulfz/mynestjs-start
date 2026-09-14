@@ -8,20 +8,21 @@ datasource db {
 }
 
 enum VerificationType {
-  emailVerification
-  passwordReset
-  orderConfirmation
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+  ORDER_CONFIRMATION
 }
 
 enum RoleName {
-  user
-  admin
-  superadmin
+  USER
+  CREATOR
+  ADMIN
+  SUPERADMIN
 }
 
 enum ProviderId {
-  credentials
-  google
+  CREDENTIALS
+  GOOGLE
 }
 
 model User {

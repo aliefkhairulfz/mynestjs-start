@@ -34,20 +34,20 @@ export class AuthService {
      * @throws ConflictException if the user already has an account.
      * @throws BadRequestException if the provider is not supported.
      */
-    public async signUp({ name, email, password, providerId }: { name: string; email: string; password: string; providerId: 'credentials' | 'google' }) {
+    public async signUp({ name, email, password, providerId }: { name: string; email: string; password: string; providerId: 'CREDENTIALS' | 'GOOGLE' }) {
         const findUser = await this.db.user.findFirst({ where: { email } });
 
         if (findUser !== null) {
             const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id } });
-            if (findAccount !== null && findAccount.providerId === 'credentials') {
+            if (findAccount !== null && findAccount.providerId === 'CREDENTIALS') {
                 throw new ConflictException('account with associated user already exist');
             }
             /**
              *  --FuturePlan
-             *  if account is find, and the providerId is not "credentials"
+             *  if account is find, and the providerId is not "CREDENTIALS"
              *  then just link user account with password
              * 
-                if (findAccount !== null && findAccount.providerId !== 'credentials') {}
+                if (findAccount !== null && findAccount.providerId !== 'CREDENTIALS') {}
              */
         }
 
@@ -57,7 +57,7 @@ export class AuthService {
                 data: { userId: newUser.id, password: await bcrypt.hash(password, 10), providerId, accountId: newUser.id }
             });
 
-            const findRole = await tx.role.findFirst({ where: { name: 'user' } });
+            const findRole = await tx.role.findFirst({ where: { name: 'USER' } });
             if (findRole === null) throw new NotFoundException('role is not found');
 
             await tx.userRole.create({ data: { userId: newUser.id, roleId: findRole.id } });
@@ -76,7 +76,7 @@ export class AuthService {
         await this.db.verification.create({
             data: {
                 userId: newUserAccount.userId,
-                type: 'emailVerification',
+                type: 'EMAIL_VERIFICATION',
                 tokenHash: hashedOtp,
                 expiredAt: addMinutes(new Date(), 15)
             }
@@ -92,7 +92,7 @@ export class AuthService {
      * @throws UnauthorizedException if credentials are invalid.
      * @throws BadRequestException if the provider is not supported.
      */
-    public async signIn({ email, password, providerId, ipAddress, userAgent }: { email: string; password: string; providerId: 'credentials' | 'google'; ipAddress?: string; userAgent?: string }) {
+    public async signIn({ email, password, providerId, ipAddress, userAgent }: { email: string; password: string; providerId: 'CREDENTIALS' | 'GOOGLE'; ipAddress?: string; userAgent?: string }) {
         const findUser = await this.db.user.findFirst({ where: { email } });
         if (!findUser) throw new UnauthorizedException('invalid credentials');
 
@@ -104,7 +104,7 @@ export class AuthService {
 
         if (!findUser.verifiedAt) {
             const existingVerification = await this.db.verification.findFirst({
-                where: { userId: findUser.id, type: 'emailVerification' }
+                where: { userId: findUser.id, type: 'EMAIL_VERIFICATION' }
             });
 
             if (!existingVerification || existingVerification.expiredAt < new Date()) {
@@ -125,7 +125,7 @@ export class AuthService {
                 await this.db.verification.create({
                     data: {
                         userId: findUser.id,
-                        type: 'emailVerification',
+                        type: 'EMAIL_VERIFICATION',
                         tokenHash: hashedOtp,
                         expiredAt: addMinutes(new Date(), 15)
                     }
@@ -184,7 +184,7 @@ export class AuthService {
             verifiedAt: session.user.verifiedAt,
             image: session.user.image,
             sessionToken: sessionToken,
-            roles: session.user.userRoles.map(ur => ur.role.name as 'user' | 'admin' | 'superadmin'),
+            roles: session.user.userRoles.map(ur => ur.role.name as 'USER' | 'ADMIN' | 'SUPERADMIN'),
             createdAt: session.user.createdAt,
             updatedAt: session.user.updatedAt
         };
@@ -206,7 +206,7 @@ export class AuthService {
         const verification = await this.db.verification.findFirst({
             where: {
                 user: { email },
-                type: 'emailVerification',
+                type: 'EMAIL_VERIFICATION',
                 tokenHash: hashed
             },
             include: { user: true }
@@ -249,7 +249,7 @@ export class AuthService {
         }
 
         const existingVerification = await this.db.verification.findFirst({
-            where: { userId: findUser.id, type: 'emailVerification' }
+            where: { userId: findUser.id, type: 'EMAIL_VERIFICATION' }
         });
 
         if (existingVerification) {
@@ -269,7 +269,7 @@ export class AuthService {
         await this.db.verification.create({
             data: {
                 userId: findUser.id,
-                type: 'emailVerification',
+                type: 'EMAIL_VERIFICATION',
                 tokenHash: hashedOtp,
                 expiredAt: addMinutes(new Date(), 15)
             }
@@ -336,11 +336,11 @@ export class AuthService {
         const findUser = await this.db.user.findFirst({ where: { email: googleUserInfoResponse.email } });
         if (findUser !== null) {
             userId = findUser.id;
-            const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id, providerId: 'google' } });
+            const findAccount = await this.db.account.findFirst({ where: { userId: findUser.id, providerId: 'GOOGLE' } });
             // find account
             if (findAccount !== null) {
                 await this.db.account.update({
-                    where: { userId_providerId: { userId: findUser.id, providerId: 'google' } },
+                    where: { userId_providerId: { userId: findUser.id, providerId: 'GOOGLE' } },
                     data: {
                         accessToken: googleTokenResponse.access_token,
                         refreshToken: googleTokenResponse.refresh_token,
@@ -356,7 +356,7 @@ export class AuthService {
                     data: {
                         userId: findUser.id,
                         accountId: googleUserInfoResponse.sub,
-                        providerId: 'google',
+                        providerId: 'GOOGLE',
                         accessToken: googleTokenResponse.access_token,
                         refreshToken: googleTokenResponse.refresh_token,
                         accessTokenExpiredAt: addSeconds(new Date(), googleTokenResponse.expires_in),
@@ -383,7 +383,7 @@ export class AuthService {
                     data: {
                         userId: newUser.id,
                         accountId: googleUserInfoResponse.sub,
-                        providerId: 'google',
+                        providerId: 'GOOGLE',
                         accessToken: googleTokenResponse.access_token,
                         refreshToken: googleTokenResponse.refresh_token,
                         accessTokenExpiredAt: addSeconds(new Date(), googleTokenResponse.expires_in),
@@ -392,7 +392,7 @@ export class AuthService {
                     }
                 });
 
-                const findRole = await tx.role.findFirst({ where: { name: 'user' } });
+                const findRole = await tx.role.findFirst({ where: { name: 'USER' } });
                 if (findRole === null) throw new NotFoundException('role is not found');
 
                 await tx.userRole.create({ data: { userId: newUser.id, roleId: findRole.id } });

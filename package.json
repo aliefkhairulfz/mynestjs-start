@@ -15,6 +15,7 @@
     "start:debug": "nest start --debug --watch",
     "start:prod": "node dist/main",
     "db:seed": "bun prisma/seed.ts",
+    "db:drop": "bun prisma/drop.ts",
     "lint": "oxlint src/ test/",
     "test": "vitest run",
     "test:watch": "vitest",

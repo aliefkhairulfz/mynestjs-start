@@ -19,11 +19,11 @@ export class SignUpReqDto {
     @MinLength(8, { message: 'Password must be at least 8 characters' })
     password: string;
 
-    @ApiProperty({ example: 'credentials', enum: ['credentials', 'google'], description: 'Sign up provider' })
+    @ApiProperty({ example: 'CREDENTIALS', enum: ['CREDENTIALS', 'GOOGLE'], description: 'Sign up provider' })
     @IsNotEmpty({ message: 'Provider must not be empty' })
     @IsString({ message: 'Provider must be a string' })
-    @IsEnum(['credentials', 'google'], { message: "Provider must be 'credentials' or 'google'" })
-    providerId: 'credentials' | 'google';
+    @IsEnum(['CREDENTIALS', 'GOOGLE'], { message: "Provider must be 'CREDENTIALS' or 'GOOGLE'" })
+    providerId: 'CREDENTIALS' | 'GOOGLE';
 }
 
 export class SignInReqDto {
@@ -38,11 +38,11 @@ export class SignInReqDto {
     @MinLength(8, { message: 'Password must be at least 8 characters' })
     password: string;
 
-    @ApiProperty({ example: 'credentials', enum: ['credentials', 'google'], description: 'Sign in provider' })
+    @ApiProperty({ example: 'CREDENTIALS', enum: ['CREDENTIALS', 'GOOGLE'], description: 'Sign in provider' })
     @IsNotEmpty({ message: 'Provider must not be empty' })
     @IsString({ message: 'Provider must be a string' })
-    @IsEnum(['credentials', 'google'], { message: "Provider must be 'credentials' or 'google'" })
-    providerId: 'credentials' | 'google';
+    @IsEnum(['CREDENTIALS', 'GOOGLE'], { message: "Provider must be 'CREDENTIALS' or 'GOOGLE'" })
+    providerId: 'CREDENTIALS' | 'GOOGLE';
 }
 
 export class ConfirmVerificationReqDto {
@@ -71,7 +71,7 @@ export class SignUpDataDto {
     name: string;
     @ApiProperty({ example: 'john@example.com', description: 'User email' })
     email: string;
-    @ApiProperty({ example: 'user', description: 'User role' })
+    @ApiProperty({ example: 'USER', description: 'User role' })
     role: string;
 }
 
@@ -109,7 +109,7 @@ export class GetUserDataDto {
     verifiedAt: Date | null;
     @ApiProperty({ example: 'https://example.com/avatar.jpg', required: false, nullable: true })
     image: string | null;
-    @ApiProperty({ example: ['user'], isArray: true })
+    @ApiProperty({ example: ['USER'], isArray: true })
     roles: string[];
 }
 

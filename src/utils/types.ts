@@ -5,7 +5,7 @@ export type UserSessionData = {
     verifiedAt: Date | null;
     image: string | null;
     sessionToken: string;
-    roles: ('user' | 'admin' | 'superadmin')[];
+    roles: ('USER' | 'CREATOR' | 'ADMIN' | 'SUPERADMIN')[];
     createdAt: Date;
     updatedAt: Date;
 };
@@ -31,7 +31,7 @@ export type GoogleUserInfoResponse = {
 
 export type CreatedOrUpdatedAccount = {
     password: string | null;
-    providerId: 'credentials' | 'google';
+    providerId: 'CREDENTIALS' | 'GOOGLE';
     id: string;
     createdAt: Date;
     updatedAt: Date;

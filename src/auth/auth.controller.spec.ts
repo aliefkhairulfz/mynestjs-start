@@ -46,8 +46,8 @@ describe('AuthController', () => {
     });
 
     it('should call signUp', async () => {
-        const dto = { name: 'Test', email: 'test@example.com', password: 'password', providerId: 'credentials' as const };
-        const result = { userId: '1', name: 'Test', email: 'test@example.com', role: 'user' as const };
+        const dto = { name: 'Test', email: 'test@example.com', password: 'password', providerId: 'CREDENTIALS' as const };
+        const result = { userId: '1', name: 'Test', email: 'test@example.com', role: 'USER' as const };
         vi.spyOn(authService, 'signUp').mockResolvedValue(result);
 
         const response = await controller.signUp(dto);
@@ -56,7 +56,7 @@ describe('AuthController', () => {
     });
 
     it('should call signIn and set cookie', async () => {
-        const dto = { email: 'test@example.com', password: 'password', providerId: 'credentials' as const };
+        const dto = { email: 'test@example.com', password: 'password', providerId: 'CREDENTIALS' as const };
         const req = { ip: '127.0.0.1', headers: { 'user-agent': 'test-agent' } } as unknown as Request;
         const res = { cookie: vi.fn() } as unknown as Response;
         const result = { rawToken: 'token', user: { id: '1', email: 'test@example.com', name: 'Test' } };
@@ -103,9 +103,9 @@ describe('AuthController', () => {
     it('should call signOut and clear cookie', async () => {
         const req = { withUser: { sessionToken: 'token' } } as unknown as Request;
         const res = { clearCookie: vi.fn() } as unknown as Response;
-        
+
         process.env.APP_ENV = 'development';
-        
+
         const response = await controller.signOut(req, res);
         expect(authService.signOut).toHaveBeenCalledWith('token');
         expect(res.clearCookie).toHaveBeenCalled();
