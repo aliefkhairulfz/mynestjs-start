@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { ApiBearerAuth, ApiOperation, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { type Request, type Response } from 'express';
 import { AuthGuard } from '../utils/guard.js';
-import { clearSessionCookie, generateTokenWithHash, hashToken, setSessionCookie } from '../utils/utils.js';
+import { clearSessionCookie, generateTokenWithHash, hashToken, setSessionCookie } from '../utils/common.js';
 import { AuthService } from './auth.service.js';
 import { ConfirmVerificationReqDto, ConfirmVerificationResDto, GetUserResDto, ResendVerificationReqDto, SignInReqDto, SignInResDto, SignUpReqDto, SignUpResDto } from './dto/auth.dto.js';
 import { SkipResponseInterceptor } from '../utils/interceptors.js';

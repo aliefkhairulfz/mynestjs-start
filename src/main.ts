@@ -1,5 +1,6 @@
 import { NestFactory, Reflector } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { Logger } from '@nestjs/common';
 import cookieParser from 'cookie-parser';
 import 'dotenv/config';
 import { AppModule, ObserveInstrument } from './app.module.js';
@@ -13,9 +14,10 @@ import { HttpResponseInterceptor } from './utils/interceptors.js';
  * and response interceptors before starting the server.
  */
 async function bootstrap() {
+    const logger = new Logger('Bootstrap');
     const app = await NestFactory.create(AppModule, {
-        instrument: ObserveInstrument,
-        logger: false
+        instrument: ObserveInstrument
+        // logger: false
     });
 
     app.use(cookieParser());
@@ -35,6 +37,9 @@ async function bootstrap() {
     const documentFactory = () => SwaggerModule.createDocument(app, config);
     SwaggerModule.setup('api/docs', app, documentFactory);
 
-    await app.listen(process.env.PORT ?? 3000);
+    const port = process.env.PORT ?? 3000;
+    await app.listen(port);
+    logger.log(`🚀 Application is running on: http://localhost:${port}`);
+    logger.log(`📚 Swagger documentation is available at: http://localhost:${port}/api/docs`);
 }
 await bootstrap();

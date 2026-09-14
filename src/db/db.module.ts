@@ -2,8 +2,8 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { PrismaMariaDb } from '@prisma/adapter-mariadb';
 import { DefaultArgs } from '@prisma/client/runtime/client';
-import { PrismaClient } from '../generated/prisma/client.js';
-import { GlobalOmitConfig } from '../generated/prisma/internal/prismaNamespace.js';
+import { PrismaClient } from './generated/prisma/client.js';
+import { GlobalOmitConfig } from './generated/prisma/internal/prismaNamespace.js';
 
 /** Token used for injecting the database service. */
 export const dbService = 'PrismaClient';

@@ -1,16 +1,16 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { AuthService } from './auth.service.js';
 import { dbService } from '../db/db.module.js';
-import { mailerService } from '../mailer/mailer.module.js';
+import { mailerService } from '../mailers/mailer.module.js';
 import { ConfigService } from '@nestjs/config';
 import { vi, describe, it, expect, beforeEach } from 'vitest';
 import * as bcrypt from 'bcrypt';
 import { UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
-import { generateTokenWithHash, hashToken, generateOTP } from '../utils/utils.js';
+import { generateTokenWithHash, hashToken, generateOTP } from '../utils/common.js';
 
 vi.mock('bcrypt');
 vi.mock('../utils/utils.js', async importOriginal => {
-    const mod = await importOriginal<typeof import('../utils/utils.js')>();
+    const mod = await importOriginal<typeof import('../utils/common.js')>();
     return {
         ...mod,
         generateTokenWithHash: vi.fn(),

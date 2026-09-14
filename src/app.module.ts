@@ -1,12 +1,12 @@
 import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerModule } from '@nestjs/throttler';
-import { CronModule } from './cron/cron.module.js';
+import { CronModule } from './jobs/cron.module.js';
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { createObserveModule } from '@nestjs/observe';
 import { AuthModule } from './auth/auth.module.js';
 import { DbModule } from './db/db.module.js';
-import { MailerModule } from './mailer/mailer.module.js';
+import { MailerModule } from './mailers/mailer.module.js';
 
 export const { ObserveModule, ObserveInstrument } = createObserveModule();
 

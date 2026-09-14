@@ -18,7 +18,7 @@ CREATE TABLE `accounts` (
     `id` VARCHAR(191) NOT NULL,
     `user_id` VARCHAR(191) NOT NULL,
     `account_id` VARCHAR(191) NOT NULL,
-    `provider_id` VARCHAR(191) NOT NULL,
+    `provider_id` ENUM('CREDENTIALS', 'GOOGLE') NOT NULL,
     `accessToken` TEXT NULL,
     `refreshToken` TEXT NULL,
     `access_token_expired_at` DATETIME(3) NULL,
@@ -52,7 +52,7 @@ CREATE TABLE `sessions` (
 CREATE TABLE `verifications` (
     `id` VARCHAR(191) NOT NULL,
     `user_id` VARCHAR(191) NOT NULL,
-    `type` ENUM('emailVerification', 'passwordReset', 'orderConfirmation') NOT NULL,
+    `type` ENUM('EMAIL_VERIFICATION', 'PASSWORD_RESET', 'ORDER_CONFIRMATION') NOT NULL,
     `token_hash` VARCHAR(191) NOT NULL,
     `code` VARCHAR(191) NULL,
     `expired_at` DATETIME(3) NOT NULL,
@@ -65,7 +65,7 @@ CREATE TABLE `verifications` (
 -- CreateTable
 CREATE TABLE `roles` (
     `id` VARCHAR(191) NOT NULL,
-    `name` ENUM('user', 'admin', 'superadmin') NOT NULL,
+    `name` ENUM('USER', 'CREATOR', 'ADMIN', 'SUPERADMIN') NOT NULL,
     `is_active` BOOLEAN NOT NULL DEFAULT true,
     `created_at` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
     `updated_at` DATETIME(3) NOT NULL,

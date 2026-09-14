@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable, SetMetadata, UnauthorizedException } from '@nestjs/common';
+import { CanActivate, ExecutionContext, Injectable, SetMetadata, UnauthorizedException, Logger } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { AuthService } from '../auth/auth.service.js';
@@ -13,6 +13,8 @@ export const AuthGuardsIsOptional = () => SetMetadata('optional', true);
  */
 @Injectable()
 export class AuthGuard implements CanActivate {
+    private readonly logger = new Logger(AuthGuard.name);
+
     constructor(
         private readonly authService: AuthService,
         private readonly reflector: Reflector,
@@ -22,12 +24,26 @@ export class AuthGuard implements CanActivate {
     async canActivate(context: ExecutionContext): Promise<boolean> {
         const isOptional = this.reflector.get<boolean>('optional', context.getHandler());
         const request = context.switchToHttp().getRequest<Request>();
-        const sessionToken = this.extractToken(request);
+        let sessionToken: string;
 
-        if (isOptional) return true;
-        const payload = await this.authService.getUser(sessionToken);
-        request.withUser = payload;
-        return true;
+        try {
+            sessionToken = this.extractToken(request);
+        } catch (error) {
+            if (isOptional) return true;
+            this.logger.warn(`Failed authentication on required route: ${request.method} ${request.originalUrl}`);
+            throw error;
+        }
+
+        try {
+            const payload = await this.authService.getUser(sessionToken);
+            request.withUser = payload;
+            this.logger.debug(`User authenticated: ${payload.email} for ${request.method} ${request.originalUrl}`);
+            return true;
+        } catch (error) {
+            if (isOptional) return true;
+            this.logger.warn(`Failed authentication for token: ${request.method} ${request.originalUrl}`);
+            throw error;
+        }
     }
 
     private extractToken(req: Request) {
@@ -53,6 +69,8 @@ export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
  */
 @Injectable()
 export class RolesGuard implements CanActivate {
+    private readonly logger = new Logger(RolesGuard.name);
+
     constructor(private reflector: Reflector) {}
 
     canActivate(context: ExecutionContext): boolean {
@@ -62,7 +80,15 @@ export class RolesGuard implements CanActivate {
         const request = context.switchToHttp().getRequest<Request>();
         const currentUser = request.withUser;
 
-        if (currentUser === undefined) return false;
-        return requiredRoles.some(role => currentUser.roles.includes(role));
+        if (currentUser === undefined) {
+            this.logger.warn(`Authorization failed: No user found on request for ${request.method} ${request.originalUrl}`);
+            return false;
+        }
+        
+        const hasRole = requiredRoles.some(role => currentUser.roles.includes(role));
+        if (!hasRole) {
+            this.logger.warn(`Authorization failed: User ${currentUser.email} lacks required roles [${requiredRoles.join(', ')}]`);
+        }
+        return hasRole;
     }
 }

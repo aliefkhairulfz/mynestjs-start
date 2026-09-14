@@ -22,10 +22,7 @@ async function main() {
         await conn.query('SET FOREIGN_KEY_CHECKS = 0;');
 
         // Fetch all tables from the database
-        const tables = await conn.query(
-            `SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?;`,
-            [process.env.DATABASE_NAME]
-        );
+        const tables = await conn.query(`SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = ?;`, [process.env.DATABASE_NAME]);
 
         if (tables.length === 0) {
             console.log('ℹ️  No tables found to drop.');

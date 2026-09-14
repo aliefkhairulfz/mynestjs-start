@@ -1,12 +1,12 @@
-import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Inject, Injectable, NotFoundException, UnauthorizedException, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
 import { addDays, addMinutes, addSeconds } from 'date-fns';
 import { type DbService, dbService } from '../db/db.module.js';
-import { type MailerService, mailerService } from '../mailer/mailer.module.js';
+import { type MailerService, mailerService } from '../mailers/mailer.module.js';
 import createTemplateEmailVerification from '../templates/email-verification.js';
 import { GoogleTokenResponse, GoogleUserInfoResponse, UserSessionData } from '../utils/types.js';
-import { generateOTP, generateTokenWithHash, hashToken } from '../utils/utils.js';
+import { generateOTP, generateTokenWithHash, hashToken } from '../utils/common.js';
 
 /**
  * Service responsible for managing user authentication, sessions, and verifications.
@@ -19,6 +19,7 @@ type SessionUserCache = {
 
 @Injectable()
 export class AuthService {
+    private readonly logger = new Logger(AuthService.name);
     private readonly sessionUserCache = new Map<string, SessionUserCache>();
 
     constructor(
@@ -81,6 +82,8 @@ export class AuthService {
                 expiredAt: addMinutes(new Date(), 15)
             }
         });
+
+        this.logger.log(`New user registered successfully: ${email} [Provider: ${providerId}]`);
 
         return newUserAccount;
     }
@@ -147,6 +150,8 @@ export class AuthService {
                 userAgent
             }
         });
+
+        this.logger.log(`User signed in successfully: ${email} [IP: ${ipAddress ?? 'Unknown'}]`);
 
         return { rawToken, user: { id: findUser.id, email: findUser.email, name: findUser.name } };
     }
@@ -293,6 +298,9 @@ export class AuthService {
         const session = await this.db.session.findFirst({ where: { token: hashed } });
         if (session) {
             await this.db.session.delete({ where: { id: session.id } });
+            this.logger.log(`Session terminated for user ID: ${session.userId}`);
+        } else {
+            this.logger.warn(`Attempted to sign out an invalid or already deleted session`);
         }
 
         return true;
